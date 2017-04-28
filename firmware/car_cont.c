@@ -35,7 +35,7 @@ Data Stack size         : 256
 #define red_led PORTB.6
 #define blue_led PORTB.7
 
-#define rotate PORTB.0
+#define rotate_led PORTB.0
 
 #define light PORTC.5
 
@@ -46,19 +46,70 @@ Data Stack size         : 256
 #define beep PINC.3
 #define zummer PINC.3
 
-#include <mega8.h>
+#define gaz 6
+#define batt 7
 
+
+#define rotate_period 5
+#define blink_period 2
+
+#include <mega8.h>
 #include <delay.h>
 
-// Declare your global variables here
+void proces_rotate(void);
+void proces_blink(void);
 
+char run_mode=0; // 0-stop, 1-run,2-back_run, 3-emergency
+char audio_mode=0; // 0-stop, 1-beep, 2-back_run, 3-siren, 4-alarm
+
+char sys_tmr=0;
+char rotate_tmr=0;
+char blink_tmr=0,blink_reg=0;
+void set_speed_led(char speed)                                    
+{
+    if (speed>40) speed_led0=1; else speed_led0=0;  
+    if (speed>70) speed_led1=1; else speed_led1=0;
+    if (speed>100) speed_led2=1; else speed_led2=0;
+    if (speed>130) speed_led3=1; else speed_led3=0;
+    if (speed>160) speed_led4=1; else speed_led4=0;
+    if (speed>190) speed_led5=1; else speed_led5=0;
+    if (speed>220) speed_led6=1; else speed_led6=0;
+}
 // Timer 0 overflow interrupt service routine
 interrupt [TIM0_OVF] void timer0_ovf_isr(void)
 {
-// Place your code here
+    sys_tmr++;
+    if (sys_tmr<100) return; else sys_tmr=0;       
+    
+    proces_rotate();
+    proces_blink();
 
 }
 
+void proces_rotate(void)// Генерація сигналу на повороти
+{
+    rotate_tmr++;   
+    if (rotate_tmr<rotate_period) return; else rotate_tmr=0;
+    rotate_led=!rotate_led;   
+}
+void proces_blink(void)// Генерація сигналу на мигалки
+{
+    blink_tmr++;   
+    if (blink_tmr<blink_period) return; else blink_tmr=0;
+    blink_reg++; 
+     if (blink_reg>10) blink_reg=1;
+    if (blink_reg<6)
+    {
+        red_led=0;
+        blue_led=!blue_led;
+    }    
+    else
+    {
+        blue_led=0;
+        red_led=!red_led;
+    }  
+    
+}
 // Voltage Reference: AREF pin
 #define ADC_VREF_TYPE ((0<<REFS1) | (0<<REFS0) | (0<<ADLAR))
 

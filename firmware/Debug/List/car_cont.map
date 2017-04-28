@@ -9,9 +9,16 @@ Variable                                                                        
 Register Allocation
 Variable                                                                          Register  Size
 ------------------------------------------------------------------------------------------------
+run_mode                                                                          R5           1
+audio_mode                                                                        R4           1
+sys_tmr                                                                           R7           1
+rotate_tmr                                                                        R6           1
+blink_tmr                                                                         R9           1
+blink_reg                                                                         R8           1
 
 FLASH Allocation [words]
 Function                                                          Address   Size
 --------------------------------------------------------------------------------
-timer0_ovf_isr                                                    0x0002D      1
-main                                                              0x0002E     51
+timer0_ovf_isr                                                    0x00046     33
+proces_rotate                                                     0x00067     12
+main                                                              0x00073     51
