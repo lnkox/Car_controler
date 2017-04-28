@@ -40,75 +40,156 @@ Data Stack size         : 256
 #define light PORTC.5
 
 #define brake PORTD.7
+#define audio PORTB.2
 
 #define back_run PINC.0
 #define run_sens PINC.1
 #define beep PINC.3
-#define zummer PINC.3
+#define zummer PINC.4
 
 #define gaz 6
 #define batt 7
+#define max_speed 2
 
+#define rotate_period 80
+#define blink_period 8
 
-#define rotate_period 5
-#define blink_period 2
+#define full_batt 14
+#define half_batt 12
+#define low_batt 11
+#define empy_bat 10
+
+#define brake_len 200;
+
+#define out_power OCR1AL
 
 #include <mega8.h>
 #include <delay.h>
+#include <stdlib.h>
+
 
 void proces_rotate(void);
 void proces_blink(void);
+unsigned int read_adc(unsigned char adc_input);
+void proces_run(void);
+void proces_siren(void);
+void proces_button(void);
+void set_tone(int freq);
+void set_speed_led(char speed);
+void check_battery(void);
+void all_off(void);
+long map(long x, long in_min, long in_max, long out_min, long out_max);// перевід одиниць
+void proces_control_power(void);
 
 char run_mode=0; // 0-stop, 1-run,2-back_run, 3-emergency
 char audio_mode=0; // 0-stop, 1-beep, 2-back_run, 3-siren, 4-alarm
 
-char sys_tmr=0;
 char rotate_tmr=0;
 char blink_tmr=0,blink_reg=0;
-void set_speed_led(char speed)                                    
-{
-    if (speed>40) speed_led0=1; else speed_led0=0;  
-    if (speed>70) speed_led1=1; else speed_led1=0;
-    if (speed>100) speed_led2=1; else speed_led2=0;
-    if (speed>130) speed_led3=1; else speed_led3=0;
-    if (speed>160) speed_led4=1; else speed_led4=0;
-    if (speed>190) speed_led5=1; else speed_led5=0;
-    if (speed>220) speed_led6=1; else speed_led6=0;
-}
+long period=0;
+
+char curent_speed=0,old_speed=0;
+int run_wathdog=0;
+int brake_tmr=0;
+
+bit old_zummer=1,old_run_sens=1;
+bit state_zummer=0,state_beep=0,state_back_run=0;
+
+bit blink_bat=0,battery_empy=0;
+char bat_period=0;
+
+
+const int pitchLow = 300;
+const int pitchHigh = 1000;
+int pitchStep = 35;
+int currentPitch=300;
+
+
+
 // Timer 0 overflow interrupt service routine
 interrupt [TIM0_OVF] void timer0_ovf_isr(void)
 {
-    sys_tmr++;
-    if (sys_tmr<100) return; else sys_tmr=0;       
-    
-    proces_rotate();
-    proces_blink();
-
-}
-
-void proces_rotate(void)// Генерація сигналу на повороти
-{
-    rotate_tmr++;   
-    if (rotate_tmr<rotate_period) return; else rotate_tmr=0;
-    rotate_led=!rotate_led;   
-}
-void proces_blink(void)// Генерація сигналу на мигалки
-{
-    blink_tmr++;   
-    if (blink_tmr<blink_period) return; else blink_tmr=0;
-    blink_reg++; 
-     if (blink_reg>10) blink_reg=1;
-    if (blink_reg<6)
+    check_battery();
+    if (battery_empy==0)
     {
-        red_led=0;
-        blue_led=!blue_led;
+        proces_rotate();
+        proces_blink();
+        proces_button();
+        proces_run();
+        proces_control_power(); 
+        if(state_zummer==1) proces_siren();
+        if(state_beep==1)set_tone(400);
+        if(state_beep==0 && state_zummer==0) period=0; 
+        
+    } 
+         
+      
+}
+// Timer2 overflow interrupt service routine
+void check_battery(void)// перевірка заряду батереї
+{
+    double cur_bat=1023;
+    bat_period++;
+    if (bat_period<100)  return; else bat_period=0;
+    cur_bat=read_adc(batt);
+    cur_bat=cur_bat/68;
+    if (cur_bat>full_batt) bat_led1=1; else bat_led1=0;
+    if (cur_bat>half_batt) bat_led2=1; else bat_led2=0;
+    if (cur_bat>low_batt) bat_led3=1; else bat_led3=0;
+    if (cur_bat<empy_bat)
+    { 
+        all_off();
+        battery_empy=1;
+       blink_bat=!blink_bat;
+       bat_led1=blink_bat;bat_led2=blink_bat;bat_led3=blink_bat;
     }    
     else
     {
-        blue_led=0;
-        red_led=!red_led;
-    }  
+        battery_empy=0;
+        light=1;
+    }
+}
+void all_off(void)// Вимкнення всіх пристроїв
+{
+speed_led0=0;speed_led1=0;speed_led2=0;speed_led3=0;speed_led4=0;speed_led5=0;speed_led6=0;
+red_led=0;blue_led=0;rotate_led=0;
+light=0;brake=0;audio=0;period=0;out_power=0;
+}
+void proces_run(void)
+{
     
+    char max_spd =map(read_adc(max_speed),0,1023,0,255);
+    curent_speed=map(read_adc(gaz),0,1023,0,255);
+    if (curent_speed<20)
+    {
+        curent_speed=0;
+        run_mode=0;
+        if (brake_tmr>0) brake_tmr--; else brake=0;
+    }  
+    else
+    {
+        brake=0;
+    }
+    if (run_mode==3) {return; curent_speed=0;}
+    if (back_run==1) {run_mode=2;max_spd=max_spd/2;} else {run_mode=1;}   
+    set_speed_led(curent_speed);
+    curent_speed=map(curent_speed,0,255,0,max_spd);
+} 
+void proces_control_power(void)
+{
+    if (run_mode==1 || run_mode==2)
+    {
+      if (out_power<curent_speed) out_power++;
+      if (out_power>curent_speed) out_power--;
+      if (curent_speed<20) out_power=0;   
+    } 
+    else
+    {
+        out_power=0;
+        curent_speed=0;
+    }  
+    if (old_speed>0 && curent_speed==0) {brake=1;brake_tmr=brake_len;} 
+    old_speed=curent_speed;
 }
 // Voltage Reference: AREF pin
 #define ADC_VREF_TYPE ((0<<REFS1) | (0<<REFS0) | (0<<ADLAR))
@@ -152,25 +233,28 @@ PORTD=(0<<PORTD7) | (0<<PORTD6) | (0<<PORTD5) | (0<<PORTD4) | (0<<PORTD3) | (0<<
 
 // Timer/Counter 0 initialization
 // Clock source: System Clock
-// Clock value: 7,813 kHz
-TCCR0=(1<<CS02) | (0<<CS01) | (1<<CS00);
+// Clock value: 31,250 kHz
+TCCR0=(1<<CS02) | (0<<CS01) | (0<<CS00);
 TCNT0=0x00;
+
 
 // Timer/Counter 1 initialization
 // Clock source: System Clock
-// Clock value: 7,813 kHz
+// Clock value: 31,250 kHz
 // Mode: Ph. correct PWM top=0x00FF
-// OC1A output: Disconnected
+// OC1A output: Non-Inverted PWM
 // OC1B output: Disconnected
 // Noise Canceler: Off
 // Input Capture on Falling Edge
-// Timer Period: 65,28 ms
+// Timer Period: 16,32 ms
+// Output Pulse(s):
+// OC1A Period: 16,32 ms Width: 0 us
 // Timer1 Overflow Interrupt: Off
 // Input Capture Interrupt: Off
 // Compare A Match Interrupt: Off
 // Compare B Match Interrupt: Off
-TCCR1A=(0<<COM1A1) | (0<<COM1A0) | (0<<COM1B1) | (0<<COM1B0) | (0<<WGM11) | (1<<WGM10);
-TCCR1B=(0<<ICNC1) | (0<<ICES1) | (0<<WGM13) | (0<<WGM12) | (1<<CS12) | (0<<CS11) | (1<<CS10);
+TCCR1A=(1<<COM1A1) | (0<<COM1A0) | (0<<COM1B1) | (0<<COM1B0) | (0<<WGM11) | (1<<WGM10);
+TCCR1B=(0<<ICNC1) | (0<<ICES1) | (0<<WGM13) | (0<<WGM12) | (1<<CS12) | (0<<CS11) | (0<<CS10);
 TCNT1H=0x00;
 TCNT1L=0x00;
 ICR1H=0x00;
@@ -182,16 +266,17 @@ OCR1BL=0x00;
 
 // Timer/Counter 2 initialization
 // Clock source: System Clock
-// Clock value: Timer2 Stopped
+// Clock value: 125,000 kHz
 // Mode: Normal top=0xFF
 // OC2 output: Disconnected
+// Timer Period: 1,248 ms
 ASSR=0<<AS2;
-TCCR2=(0<<PWM2) | (0<<COM21) | (0<<COM20) | (0<<CTC2) | (0<<CS22) | (0<<CS21) | (0<<CS20);
+TCCR2=(0<<PWM2) | (0<<COM21) | (0<<COM20) | (0<<CTC2) | (1<<CS22) | (0<<CS21) | (0<<CS20);
 TCNT2=0x00;
 OCR2=0x00;
 
 // Timer(s)/Counter(s) Interrupt(s) initialization
-TIMSK=(0<<OCIE2) | (0<<TOIE2) | (0<<TICIE1) | (0<<OCIE1A) | (0<<OCIE1B) | (0<<TOIE1) | (1<<TOIE0);
+TIMSK=(0<<OCIE2) | (1<<TOIE2) | (0<<TICIE1) | (0<<OCIE1A) | (0<<OCIE1B) | (0<<TOIE1) | (1<<TOIE0);
 
 // External Interrupt(s) initialization
 // INT0: Off
@@ -230,7 +315,88 @@ TWCR=(0<<TWEA) | (0<<TWSTA) | (0<<TWSTO) | (0<<TWEN) | (0<<TWIE);
 
 while (1)
       {
-      // Place your code here
 
-      }
+}
+}
+void proces_button(void) //Обробка натиснення кнопок
+{
+    state_beep=!beep; 
+    state_back_run=!back_run;
+    if(old_zummer!=zummer)
+    {  
+        state_zummer=!zummer;
+        if(state_zummer==1)
+        {
+            pitchStep=(rand() % 3)*10 + 5; 
+            currentPitch=pitchLow;
+        }
+    }    
+    if(old_run_sens!=run_sens)
+    {
+        if(run_sens==0) run_wathdog=0;
+    }
+    old_zummer=zummer;
+    old_run_sens=run_sens;
+}
+
+void set_speed_led(char speed)// Вивід рівня швидкості на світлодіодне табло                                   
+{
+    if (speed>40) speed_led0=1; else speed_led0=0;  
+    if (speed>70) speed_led1=1; else speed_led1=0;
+    if (speed>100) speed_led2=1; else speed_led2=0;
+    if (speed>130) speed_led3=1; else speed_led3=0;
+    if (speed>160) speed_led4=1; else speed_led4=0;
+    if (speed>190) speed_led5=1; else speed_led5=0;
+    if (speed>220) speed_led6=1; else speed_led6=0;
+}
+void proces_rotate(void)// Генерація сигналу на повороти
+{
+    rotate_tmr++;   
+    if (rotate_tmr<rotate_period) return; else rotate_tmr=0;
+    rotate_led=!rotate_led;   
+}
+void proces_blink(void)// Генерація сигналу на мигалки
+{
+    blink_tmr++;   
+    if (blink_tmr<blink_period) return; else blink_tmr=0;
+    blink_reg++; 
+     if (blink_reg>12) blink_reg=1;
+    if (blink_reg>6)
+    {
+        red_led=0;
+        blue_led=!blue_led;
+    }    
+    else
+    {
+        blue_led=0;
+        red_led=!red_led;
+    }  
+    
+}
+
+interrupt [TIM2_OVF] void timer2_ovf_isr(void)// Таймер відтворення звуку
+{
+    TCNT2=period;     
+    if (period==0) {audio=0; return;} 
+   audio=!audio; 
+}
+
+void set_tone(int freq)//Встановлення тону звучання
+{
+  period =256-(62500/freq) ;
+}
+void proces_siren(void)// Генерація сирени
+{
+  set_tone(currentPitch);
+  currentPitch += pitchStep;
+  if(currentPitch >= pitchHigh) {
+    pitchStep = -pitchStep;
+  }
+  else if(currentPitch <= pitchLow) {
+     pitchStep = -pitchStep;
+  }
+}
+long map(long x, long in_min, long in_max, long out_min, long out_max)// перевід одиниць
+{
+  return ((x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min);
 }

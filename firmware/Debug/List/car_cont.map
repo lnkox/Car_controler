@@ -1,6 +1,11 @@
 RAM Allocation [bytes]
 Variable                                                                          Address   Size
 ------------------------------------------------------------------------------------------------
+period                                                                            0x0160       4
+brake_tmr                                                                         0x0164       2
+pitchStep                                                                         0x0166       2
+currentPitch                                                                      0x0168       2
+_seed                                                                             0x016A       4
 
 EEPROM Allocation [bytes]
 Variable                                                                          Address   Size
@@ -11,14 +16,35 @@ Variable                                                                        
 ------------------------------------------------------------------------------------------------
 run_mode                                                                          R5           1
 audio_mode                                                                        R4           1
-sys_tmr                                                                           R7           1
-rotate_tmr                                                                        R6           1
-blink_tmr                                                                         R9           1
-blink_reg                                                                         R8           1
+rotate_tmr                                                                        R7           1
+blink_tmr                                                                         R6           1
+blink_reg                                                                         R9           1
+curent_speed                                                                      R8           1
+old_speed                                                                         R11          1
+run_wathdog                                                                       R12,R13      2
+old_zummer                                                                        R2.0      1bit
+old_run_sens                                                                      R2.1      1bit
+state_zummer                                                                      R2.2      1bit
+state_beep                                                                        R2.3      1bit
+state_back_run                                                                    R2.4      1bit
+blink_bat                                                                         R2.5      1bit
+battery_empy                                                                      R2.6      1bit
+bat_period                                                                        R10          1
 
 FLASH Allocation [words]
 Function                                                          Address   Size
 --------------------------------------------------------------------------------
-timer0_ovf_isr                                                    0x00046     33
-proces_rotate                                                     0x00067     12
-main                                                              0x00073     51
+timer0_ovf_isr                                                    0x0005D     48
+check_battery                                                     0x0008D     95
+all_off                                                           0x000EC     16
+proces_run                                                        0x000FC     65
+proces_control_power                                              0x0013D     42
+main                                                              0x00174     54
+proces_button                                                     0x001AA     56
+set_speed_led                                                     0x001E2     45
+proces_rotate                                                     0x0020F     12
+proces_blink                                                      0x0021B     29
+timer2_ovf_isr                                                    0x00238     33
+set_tone                                                          0x00259     24
+proces_siren                                                      0x00271     27
+rand                                                              0x002B2     28
